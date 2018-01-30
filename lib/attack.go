@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"sync"
 	"time"
 
@@ -226,7 +227,6 @@ func (a *Attacker) hit(tr Targeter, tm time.Time) *Result {
 	)
 
 	defer func() {
-		res.Latency = time.Since(tm)
 		if err != nil {
 			res.Error = err.Error()
 		}
@@ -241,6 +241,17 @@ func (a *Attacker) hit(tr Targeter, tm time.Time) *Result {
 	if err != nil {
 		return &res
 	}
+
+	var connTime time.Time
+	trc := httptrace.ClientTrace{
+		GotConn: func(httptrace.GotConnInfo) {
+			connTime = time.Now()
+		},
+		GotFirstResponseByte: func() {
+			res.Latency = time.Since(connTime)
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &trc))
 
 	r, err := a.client.Do(req)
 	if err != nil {
